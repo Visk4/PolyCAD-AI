@@ -27,50 +27,50 @@ Most generative 3D tools rely on non-deterministic diffusion models that output 
 ```mermaid
 flowchart TD
     subgraph Frontend["Frontend (React + Vite + TypeScript, :5173)"]
-        UI["ChatPanel\nPrompt Input & Real-Time Heal Log"]
-        VP["Viewport (R3F)\nThree.js STL Mesh + Auto-Fit Camera"]
-        PP["ParamPanel\nDynamic Parametric Sliders & Code Inspector"]
-        Hook["useGenerate Hook\nState Machine & Debounced Dispatch"]
-        AC["api/client.ts\nType-Safe Fetch Client"]
+        UI["ChatPanel<br/>Prompt Input & Real-Time Heal Log"]
+        VP["Viewport (R3F)<br/>Three.js STL Mesh + Auto-Fit Camera"]
+        PP["ParamPanel<br/>Dynamic Parametric Sliders & Code Inspector"]
+        Hook["useGenerate Hook<br/>State Machine & Debounced Dispatch"]
+        AC["api/client.ts<br/>Type-Safe Fetch Client"]
     end
 
     subgraph Backend["Backend (FastAPI, :8000)"]
-        Router["cad.py Router\n/api/generate • /api/recompile • /api/stl • /api/scad"]
-        Pipeline["pipeline.py\nAgentic Auto-Healing Pipeline"]
-        LLM["llm.py\nProvider Abstraction (Gemini / Groq)"]
-        OSCAD["openscad.py\nSandboxed CLI Subprocess Engine"]
-        Params["params.py\nRegex Extraction & AST Substitution"]
-        Config["config.py\nPydantic Settings (.env)"]
-        Output[("output/\n*.stl & *.scad")]
+        Router["cad.py Router<br/>/api/generate • /api/recompile • /api/stl • /api/scad"]
+        Pipeline["pipeline.py<br/>Agentic Auto-Healing Pipeline"]
+        LLM["llm.py<br/>Provider Abstraction (Gemini / Groq)"]
+        OSCAD["openscad.py<br/>Sandboxed CLI Subprocess Engine"]
+        Params["params.py<br/>Regex Extraction & AST Substitution"]
+        Config["config.py<br/>Pydantic Settings (.env)"]
+        Output[("output/<br/>*.stl & *.scad")]
     end
 
     subgraph External["External Services & Native Binaries"]
-        GeminiAPI["Gemini API\ngemini-3.5-flash"]
-        OpenSCAD["OpenSCAD CLI\nNightly + Manifold CSG Engine"]
+        GeminiAPI["Gemini API<br/>gemini-3.5-flash"]
+        OpenSCAD["OpenSCAD CLI<br/>Nightly + Manifold CSG Engine"]
     end
 
-    UI -->|Natural Language Prompt| Hook
-    Hook -->|apiGenerate()| AC
-    Hook -->|apiRecompile() (debounced 400ms)| AC
-    AC -->|POST /api/generate| Router
-    AC -->|POST /api/recompile| Router
-    Router -->|generate_with_heal_loop()| Pipeline
-    Pipeline -->|generate()| LLM
-    LLM -->|HTTPS| GeminiAPI
-    GeminiAPI -->|OpenSCAD Source| LLM
-    Pipeline -->|compile_scad()| OSCAD
-    OSCAD -->|Subprocess (30s timeout)| OpenSCAD
-    OpenSCAD -->|Watertight STL Binary| OSCAD
-    OSCAD -->|CompileResult| Pipeline
-    Pipeline -->|parse_params()| Params
-    Router -->|Persist Artifacts| Output
-    Router -->|JSON Response| AC
-    AC -->|Update State (stlRevision)| Hook
-    Hook -->|stlUrl + revision cache-buster| VP
-    Hook -->|params[]| PP
-    PP -->|onParamChange()| Hook
-    VP -->|GET /api/stl/:id?rev=N| Router
-    Router -->|Raw Binary Stream| VP
+    UI -->|"Natural Language Prompt"| Hook
+    Hook -->|"apiGenerate()"| AC
+    Hook -->|"apiRecompile() (debounced 400ms)"| AC
+    AC -->|"POST /api/generate"| Router
+    AC -->|"POST /api/recompile"| Router
+    Router -->|"generate_with_heal_loop()"| Pipeline
+    Pipeline -->|"generate()"| LLM
+    LLM -->|"HTTPS"| GeminiAPI
+    GeminiAPI -->|"OpenSCAD Source"| LLM
+    Pipeline -->|"compile_scad()"| OSCAD
+    OSCAD -->|"Subprocess (30s timeout)"| OpenSCAD
+    OpenSCAD -->|"Watertight STL Binary"| OSCAD
+    OSCAD -->|"CompileResult"| Pipeline
+    Pipeline -->|"parse_params()"| Params
+    Router -->|"Persist Artifacts"| Output
+    Router -->|"JSON Response"| AC
+    AC -->|"Update State (stlRevision)"| Hook
+    Hook -->|"stlUrl + revision cache-buster"| VP
+    Hook -->|"params"| PP
+    PP -->|"onParamChange()"| Hook
+    VP -->|"GET /api/stl/:id?rev=N"| Router
+    Router -->|"Raw Binary Stream"| VP
 ```
 
 ---
