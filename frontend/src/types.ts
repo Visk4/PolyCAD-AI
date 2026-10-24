@@ -28,6 +28,7 @@ export interface GenerateResponse {
   stl_url: string | null;
   scad_url: string | null;
   attempts: Attempt[];
+  session_id: string;
 }
 
 /** Response from POST /api/recompile */
@@ -37,4 +38,29 @@ export interface RecompileResponse {
   code: string;
   stl_url: string | null;
   error: string | null;
+}
+
+/** A chat message in the conversation */
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  model_id?: string | null;
+  timestamp?: string;
+}
+
+/** Response from POST /api/chat/session */
+export interface SessionResponse {
+  session_id: string;
+}
+
+/** Response from GET /api/chat/{session_id}/history */
+export interface HistoryResponse {
+  session_id: string;
+  messages: ChatMessage[];
+}
+
+/** Response from POST /api/describe-image */
+export interface DescribeImageResponse {
+  description: string;
+  session_id: string | null;
 }

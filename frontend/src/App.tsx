@@ -3,15 +3,37 @@
  *
  * Layout: ChatPanel (left) | Viewport (center) | ParamPanel (right)
  * All state flows through the useGenerate hook.
+ * Panels are separated by draggable resize handles.
  */
 
+import { useState, useCallback } from "react";
 import ChatPanel from "./components/ChatPanel";
 import Viewport from "./components/Viewport";
 import ParamPanel from "./components/ParamPanel";
+import ResizeHandle from "./components/ResizeHandle";
 import { useGenerate } from "./hooks/useGenerate";
 
+// Min/max widths for side panels (pixels)
+const MIN_PANEL = 200;
+const MAX_PANEL = 500;
+const DEFAULT_LEFT = 300;
+const DEFAULT_RIGHT = 300;
+
 export default function App() {
-  const { state, generate, updateParam } = useGenerate();
+  const { state, generate, updateParam, newSession, describeAndGenerate } = useGenerate();
+
+  // Panel widths in pixels
+  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT);
+  const [rightWidth, setRightWidth] = useState(DEFAULT_RIGHT);
+
+  const handleLeftResize = useCallback((delta: number) => {
+    setLeftWidth((w) => Math.min(MAX_PANEL, Math.max(MIN_PANEL, w + delta)));
+  }, []);
+
+  const handleRightResize = useCallback((delta: number) => {
+    // Dragging right handle to the RIGHT should shrink the right panel
+    setRightWidth((w) => Math.min(MAX_PANEL, Math.max(MIN_PANEL, w - delta)));
+  }, []);
 
   return (
     <div className="h-screen w-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
@@ -28,16 +50,25 @@ export default function App() {
         <span className="text-xs text-zinc-500">Text → Parametric 3D CAD</span>
       </header>
 
-      {/* Main three-column layout */}
-      <main className="flex-1 flex gap-3 p-3 min-h-0">
-        {/* Left: Chat/Prompt panel (20%) */}
-        <div className="w-[280px] shrink-0">
+      {/* Main three-column layout with resize handles */}
+      <main className="flex-1 flex p-3 min-h-0 gap-0">
+        {/* Left: Chat/Prompt panel */}
+        <div className="shrink-0" style={{ width: leftWidth }}>
           <ChatPanel
             onSubmit={generate}
+            onNewSession={newSession}
+            onImageUpload={describeAndGenerate}
             loading={state.status === "loading"}
             attempts={state.attempts}
             errorMsg={state.errorMsg}
+            chatMessages={state.chatMessages}
+            sessionId={state.sessionId}
           />
+        </div>
+
+        {/* Left resize handle */}
+        <div className="flex items-stretch px-1">
+          <ResizeHandle onResize={handleLeftResize} />
         </div>
 
         {/* Center: 3D Viewport (flex-1) */}
@@ -50,8 +81,13 @@ export default function App() {
           />
         </div>
 
-        {/* Right: Param panel (25%) */}
-        <div className="w-[280px] shrink-0">
+        {/* Right resize handle */}
+        <div className="flex items-stretch px-1">
+          <ResizeHandle onResize={handleRightResize} />
+        </div>
+
+        {/* Right: Param panel */}
+        <div className="shrink-0" style={{ width: rightWidth }}>
           <ParamPanel
             params={state.params}
             code={state.code}

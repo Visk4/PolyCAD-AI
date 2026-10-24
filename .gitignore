@@ -45,6 +45,8 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/dist-ssr/
+.vite/
+frontend/.vite/
 *.local
 npm-debug.log*
 yarn-debug.log*

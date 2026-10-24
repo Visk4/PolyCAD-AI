@@ -3,12 +3,12 @@
  *
  * States: idle → loading → success/error
  * Manages: prompt submission, auto-heal attempts log, param changes (debounced),
- *          current STL URL, code, and params.
+ *          current STL URL, code, params, and chat history with session tracking.
  */
 
 import { useState, useRef, useCallback } from "react";
-import type { Param, Attempt, GenerateResponse } from "../types";
-import { apiGenerate, apiRecompile } from "../api/client";
+import type { Param, Attempt, GenerateResponse, ChatMessage } from "../types";
+import { apiGenerate, apiRecompile, apiDescribeImage } from "../api/client";
 
 export interface GenerateState {
   /** Current phase */
@@ -32,6 +32,10 @@ export interface GenerateState {
   /** Revision counter — incremented on every successful compile/recompile
    *  so the Viewport knows to reload the STL even when the URL path is the same */
   stlRevision: number;
+  /** Chat session ID for conversation continuity */
+  sessionId: string | null;
+  /** Chat messages for display */
+  chatMessages: ChatMessage[];
 }
 
 export function useGenerate() {
@@ -46,6 +50,8 @@ export function useGenerate() {
     errorMsg: null,
     recompiling: false,
     stlRevision: 0,
+    sessionId: null,
+    chatMessages: [],
   });
 
   // Refs to avoid stale closures inside the debounced setTimeout
@@ -63,16 +69,39 @@ export function useGenerate() {
    * Submit a prompt to the LLM pipeline.
    */
   const generate = useCallback(async (prompt: string) => {
+    // Add user message to chat immediately for responsive UI
     setState((s) => ({
       ...s,
       status: "loading",
       errorMsg: null,
       attempts: [],
       stlUrl: null,
+      chatMessages: [
+        ...s.chatMessages,
+        { role: "user" as const, content: prompt },
+      ],
     }));
 
     try {
-      const res: GenerateResponse = await apiGenerate(prompt);
+      // Read session ID from latest state via callback
+      let currentSessionId: string | null = null;
+      setState((s) => {
+        currentSessionId = s.sessionId;
+        return s; // no-op update to read state
+      });
+
+      const res: GenerateResponse = await apiGenerate(prompt, currentSessionId);
+
+      // Build assistant message
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content:
+          res.status === "success"
+            ? `✓ Model generated successfully (${res.attempts.length} attempt${res.attempts.length > 1 ? "s" : ""})`
+            : `✗ Generation failed after ${res.attempts.length} attempt${res.attempts.length > 1 ? "s" : ""}`,
+        model_id: res.id,
+      };
+
       setState((s) => ({
         ...s,
         status: res.status === "success" ? "success" : "error",
@@ -87,14 +116,124 @@ export function useGenerate() {
             ? "All compile attempts failed. Check the heal log."
             : null,
         stlRevision: s.stlRevision + 1,
+        sessionId: res.session_id,
+        chatMessages: [...s.chatMessages, assistantMsg],
       }));
     } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
       setState((s) => ({
         ...s,
         status: "error",
-        errorMsg: err instanceof Error ? err.message : "Unknown error",
+        errorMsg,
+        chatMessages: [
+          ...s.chatMessages,
+          { role: "assistant" as const, content: `✗ Error: ${errorMsg}` },
+        ],
       }));
     }
+  }, []);
+
+  /**
+   * Upload an image, describe it via Gemini vision, then auto-generate the CAD model.
+   * Two-step flow: image → description (shown in chat) → generate.
+   */
+  const describeAndGenerate = useCallback(async (file: File) => {
+    // Show upload message in chat
+    setState((s) => ({
+      ...s,
+      status: "loading",
+      errorMsg: null,
+      attempts: [],
+      chatMessages: [
+        ...s.chatMessages,
+        { role: "user" as const, content: `📷 Uploaded image: ${file.name}` },
+      ],
+    }));
+
+    try {
+      // Step 1: Describe the image
+      let currentSessionId: string | null = null;
+      setState((s) => { currentSessionId = s.sessionId; return s; });
+
+      const descRes = await apiDescribeImage(file, currentSessionId);
+
+      // Show the description in chat
+      setState((s) => ({
+        ...s,
+        sessionId: descRes.session_id ?? s.sessionId,
+        chatMessages: [
+          ...s.chatMessages,
+          {
+            role: "assistant" as const,
+            content: `🔍 Detected: ${descRes.description}`,
+          },
+        ],
+      }));
+
+      // Step 2: Generate CAD from the description
+      // Read updated session ID
+      setState((s) => { currentSessionId = s.sessionId; return s; });
+
+      const genRes = await apiGenerate(descRes.description, currentSessionId);
+
+      const assistantMsg: ChatMessage = {
+        role: "assistant",
+        content:
+          genRes.status === "success"
+            ? `✓ Model generated from image (${genRes.attempts.length} attempt${genRes.attempts.length > 1 ? "s" : ""})`
+            : `✗ Generation failed after ${genRes.attempts.length} attempt${genRes.attempts.length > 1 ? "s" : ""}`,
+        model_id: genRes.id,
+      };
+
+      setState((s) => ({
+        ...s,
+        status: genRes.status === "success" ? "success" : "error",
+        fileId: genRes.id,
+        code: genRes.code,
+        params: genRes.params,
+        stlUrl: genRes.stl_url,
+        scadUrl: genRes.scad_url,
+        attempts: genRes.attempts,
+        errorMsg:
+          genRes.status === "failed"
+            ? "All compile attempts failed. Check the heal log."
+            : null,
+        stlRevision: s.stlRevision + 1,
+        sessionId: genRes.session_id,
+        chatMessages: [...s.chatMessages, assistantMsg],
+      }));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : "Unknown error";
+      setState((s) => ({
+        ...s,
+        status: "error",
+        errorMsg,
+        chatMessages: [
+          ...s.chatMessages,
+          { role: "assistant" as const, content: `✗ Error: ${errorMsg}` },
+        ],
+      }));
+    }
+  }, []);
+
+  /**
+   * Start a new chat session (clears history).
+   */
+  const newSession = useCallback(() => {
+    setState((s) => ({
+      ...s,
+      sessionId: null,
+      chatMessages: [],
+      status: "idle",
+      fileId: null,
+      code: "",
+      params: [],
+      stlUrl: null,
+      scadUrl: null,
+      attempts: [],
+      errorMsg: null,
+      stlRevision: 0,
+    }));
   }, []);
 
   /**
@@ -152,5 +291,5 @@ export function useGenerate() {
     [] // no deps needed — we read from refs
   );
 
-  return { state, generate, updateParam };
+  return { state, generate, updateParam, newSession, describeAndGenerate };
 }
