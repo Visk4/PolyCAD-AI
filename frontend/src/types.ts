@@ -46,6 +46,7 @@ export interface ChatMessage {
   content: string;
   model_id?: string | null;
   timestamp?: string;
+  imagePreview?: string;  // object URL for locally-attached image previews
 }
 
 /** Response from POST /api/chat/session */
@@ -63,4 +64,12 @@ export interface HistoryResponse {
 export interface DescribeImageResponse {
   description: string;
   session_id: string | null;
+}
+
+/** Lightweight session metadata stored in localStorage */
+export interface SessionMeta {
+  id: string;
+  title: string;       // derived from first user prompt
+  timestamp: number;   // ms since epoch
+  messageCount: number;
 }
